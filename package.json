@@ -1,0 +1,20 @@
+{
+  "name": "bootcamp",
+  "version": "1.0.0",
+  "description": "Web API",
+  "main": "server.js",
+  "scripts": {
+    "start": "NODE_ENV=production node server",
+    "dev": "nodemon server"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git remote add origin https://github.com/QuirkyMoose/bootcamp-api.git"
+  },
+  "author": "QuirkyMoose",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  }
+}
