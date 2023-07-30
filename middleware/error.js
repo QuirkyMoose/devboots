@@ -1,8 +1,8 @@
 const ErrorResponse = require("../utils/errorResponse");
 
 const errorHandler = (err,req,res,next)=>{
-    let error = {...err}
-    error.message = err.message
+    let error = {...err} //copies enumurable properties from err into error
+    error.message = err.message //err.message isn't an enumurable property so we force its copy into error.message with this syntax
 
     console.log(err);
 
