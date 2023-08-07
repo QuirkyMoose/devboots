@@ -3,6 +3,7 @@ const ErrorResponse = require('../utils/errorResponse')
 const asyncHandler = require('../middleware/async')
 const geocoder = require('../utils/geocoder')
 
+
 //@desc Get all bootcamps
 //@route GET /api/v1/bootcamps
 //@access Public
@@ -17,7 +18,10 @@ exports.getBootcamps = asyncHandler(async (req,res,next)=>{
         let queryStr = JSON.stringify(reqQuery);
         queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
 
-        query = Bootcamp.find(JSON.parse(queryStr))
+        query = Bootcamp.find(JSON.parse(queryStr)).populate({
+                path:'courses',
+                select:'title description'
+        });
 
         if(req.query.select){
                 let str = req.query.select.split(',').join(' ');//returns parameter passed into select ie select=name,description and then splits it on the comma and then joins it with a space, returns the results into the variable str
@@ -32,7 +36,7 @@ exports.getBootcamps = asyncHandler(async (req,res,next)=>{
 
         //Pagination
         const page = parseInt(req.query.page, 10) || 1;
-        const limit = parseInt(req.query.limit, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 100;
         const startIndex = (page - 1) * limit;
         const endIndex = page * limit;
         const total = await Bootcamp.countDocuments(JSON.parse(queryStr));
@@ -104,10 +108,11 @@ exports.updateBootcamp = asyncHandler(async (req,res,next)=>{
 //@access Private
 exports.deleteBootcamp = asyncHandler(async (req,res,next)=>{
 
-        const bootcamp = await Bootcamp.findByIdAndDelete(req.params.id);
+        const bootcamp = await Bootcamp.findById(req.params.id);
         if(!bootcamp){
             return next(new ErrorResponse(`Resource not found with id ${req.params.id}`,404))
         }
+        await bootcamp.deleteOne();
         res.status(200).json({ success:true, msg: `${req.params.id} deleted`})
 })
 
@@ -138,17 +143,3 @@ exports.getBootcampInRadius = asyncHandler(async (req,res,next)=>{
         });
 
 })
-
-//@desc GET queried bootcamp
-//@route GET /api/v1/bootcamps/:id
-//@access Private
-exports.GetQueryBootcamp = asyncHandler(async (req,res,next)=>{
-        let query;
-        let queryStr = JSON.stringify(req.query);
-        queryStr = queryStr.replace('/\b(gt|gte|lt|lte|in)\bg/', match => `$${match}`);
-        query = Bootcamp.find(JSON.parse(queryStr))
-
-        const bootcamp = await query;
-        res.status(200).json({ success:true, count: bootcamp.length, msg: bootcamp})
-})
-
