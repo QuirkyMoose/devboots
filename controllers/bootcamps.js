@@ -1,70 +1,16 @@
-const Bootcamp = require('../models/Bootcamp')
-const ErrorResponse = require('../utils/errorResponse')
-const asyncHandler = require('../middleware/async')
-const geocoder = require('../utils/geocoder')
+const path = require('path');
+const Bootcamp = require('../models/Bootcamp');
+const advancedResults = require('../middleware/advancedResults');
+const ErrorResponse = require('../utils/errorResponse');
+const asyncHandler = require('../middleware/async');
+const geocoder = require('../utils/geocoder');
 
 
 //@desc Get all bootcamps
 //@route GET /api/v1/bootcamps
 //@access Public
 exports.getBootcamps = asyncHandler(async (req,res,next)=>{
-     
-        let query;
-        const reqQuery = {...req.query}; // copy req.query into reqQuery
-        const removeFields = ['select','sort','limit','page'] // specify fields to delete from reqQuery
-        //mongo treats parameters in our queries as fields, but select and a couple other keywords aren't fields in out database, we need to remove it from our copied query object so the keywords can maintain its characteristics 
-
-        removeFields.forEach(param => delete reqQuery[param]) // remove specified fields from reqQuery, these fields are special characters that enable us perform specific functions
-        let queryStr = JSON.stringify(reqQuery);
-        queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
-
-        query = Bootcamp.find(JSON.parse(queryStr)).populate({
-                path:'courses',
-                select:'title description'
-        });
-
-        if(req.query.select){
-                let str = req.query.select.split(',').join(' ');//returns parameter passed into select ie select=name,description and then splits it on the comma and then joins it with a space, returns the results into the variable str
-                //select query syntax : query.select('name occupation')
-                query = query.select(str)//query becomes query.select(str) str being the comma seperated parameters passed into select
-        }
-
-        if(req.query.sort){
-                let sortBy = req.query.sort.split(',').join(' ')
-                query = query.sort(sortBy)
-        }
-
-        //Pagination
-        const page = parseInt(req.query.page, 10) || 1;
-        const limit = parseInt(req.query.limit, 10) || 100;
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
-        const total = await Bootcamp.countDocuments(JSON.parse(queryStr));
-
-        query = query.skip(startIndex).limit(limit)
-
-
-
-        //Execute Query
-        const bootcamp = await query;
-        
-        //pagination result
-        const pagination = {};
-
-        if(endIndex < total){
-                pagination.next = {
-                        page: page + 1,
-                        limit
-                }
-        }
-        if(startIndex > 0 && bootcamp != ''){
-                pagination.prev = {
-                        page: page - 1,
-                        limit
-                }
-        }
-
-        res.status(200).json({ success:true, count: bootcamp.length, pagination, msg: bootcamp})
+        res.status(200).json(res.advancedResults); //res.advancedResults is from advancedResults middleware
 })
       
 
@@ -84,6 +30,16 @@ exports.getBootcamp = asyncHandler(async (req,res,next)=>{
 //@route POST /api/v1/bootcamps
 //@access Private
 exports.createBootcamp = asyncHandler(async (req,res,next)=>{
+        //Add user to req.body 
+        req.body.user = req.user.id;
+
+        //check if user has already published a bootcamp
+        const publishedBootcamp = await Bootcamp.findOne({user: req.user.id});
+
+        //If user is not an admin, they can only add one bootcamp
+        if(publishedBootcamp && req.user.role !== 'admin'){ 
+                return next(new ErrorResponse(`User with id ${req.user.id} has already published a bootcamp`,400))
+        };
 
         const bootcamp = await Bootcamp.create(req.body)
         res.status(201).json({ success:true, msg:bootcamp })
@@ -93,13 +49,15 @@ exports.createBootcamp = asyncHandler(async (req,res,next)=>{
 //@route PUT /api/v1/bootcamps/:id
 //@access Private
 exports.updateBootcamp = asyncHandler(async (req,res,next)=>{
-        const bootcamp = await Bootcamp.findByIdAndUpdate(req.params.id,req.body,{
-            new:true,
-            runValidators:true
-        })
+        let bootcamp = await Bootcamp.findById(req.params.id);
         if(!bootcamp){
-            return next(new ErrorResponse(`Resource not found with id ${req.params.id}`,404))
+                return next(new ErrorResponse(`Resource not found with id ${req.params.id}`,404))
         }
+        //Make sure user is bootcamp owner
+        if(bootcamp.user.toString() !== req.user.id && req.user.role !== 'admin'){
+                return next(new ErrorResponse(`User with id ${req.user.id} is not authorized to update this bootcamp`,401))
+        }
+        bootcamp = Bootcamp.findByIdAndUpdate(req.params.id, req.body, {new:true, runValidators:true})
         res.status(200).json({ success:true, success:req.body})   
 })
 
@@ -112,6 +70,12 @@ exports.deleteBootcamp = asyncHandler(async (req,res,next)=>{
         if(!bootcamp){
             return next(new ErrorResponse(`Resource not found with id ${req.params.id}`,404))
         }
+
+         //Make sure user is bootcamp owner
+        if(bootcamp.user.toString() !== req.user.id && req.user.role !== 'admin'){
+                return next(new ErrorResponse(`User with id ${req.user.id} is not authorized to delete this bootcamp`,401))
+        }
+        
         await bootcamp.deleteOne();
         res.status(200).json({ success:true, msg: `${req.params.id} deleted`})
 })
@@ -142,4 +106,49 @@ exports.getBootcampInRadius = asyncHandler(async (req,res,next)=>{
                 data: bootcamps
         });
 
+})
+
+
+//@desc Upload photo for bootcamp
+//@route PUT /api/v1/bootcamps/:id/photo
+//@access Private
+exports.bootcampPhotoUpload = asyncHandler(async (req,res,next)=>{
+
+        const bootcamp = await Bootcamp.findById(req.params.id);
+        if(!bootcamp){
+            return next(new ErrorResponse(`Resource not found with id ${req.params.id}`,404))
+        }
+        if(!req.files){
+                return next(new ErrorResponse(`Please upload a file`,400))
+        } //check if file was uploaded
+
+        // console.log(req.files);
+        // console.log(req.files.files.mimetype);
+        const file = req.files.files;
+        
+        if(!file.mimetype.startsWith('image')){
+                return next(new ErrorResponse(`Please upload an image file`,400))
+        } //check if file is an image
+
+        if(file.size > process.env.MAX_FILE_UPLOAD){
+                return next(new ErrorResponse(`Please upload an image less than ${process.env.MAX_FILE_UPLOAD}`,400))
+        } //check if file is less than 1mb
+
+        //Create custom filename
+        file.name = `photo_${bootcamp._id}${path.parse(file.name).ext}`; //path.parse(file.name).ext returns the extension of the file
+
+        file.mv(`${process.env.FILE_UPLOAD_PATH}/${file.name}`, async err =>{
+                if(err){
+                        console.error(err);
+                        return next(new ErrorResponse(`Problem with file upload`,500))
+                }
+                await Bootcamp.findByIdAndUpdate(req.params.id, {photo: file.name});
+                res.status(200).json({
+                        success:true,
+                        data: file.name
+                })
+        })
+
+
+        
 })
