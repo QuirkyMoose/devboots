@@ -15,7 +15,8 @@ const PORT = process.env.PORT || 5000;
 const bootcamps = require('./routes/bootcamps');
 const courses = require('./routes/courses');
 const authRoute = require('./routes/auth');
-const userRoute = require('./routes/users')
+const userRoute = require('./routes/users');
+const reviews = require('./routes/reviews');
 
 //Load env var
 dotenv.config({path:'./config/config.env'});
@@ -50,6 +51,7 @@ app.use('/api/v1/bootcamps', bootcamps);
 app.use('/api/v1/courses', courses);
 app.use('/api/v1/auth', authRoute);
 app.use('/api/v1/users', userRoute);
+app.use('/api/v1/reviews', reviews);
 
 
 app.use(errorHandler);
