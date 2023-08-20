@@ -6,3 +6,6 @@ Notable features include sophisticated search filters, in-depth bootcamp insight
 Developed using Node.js, Express.js, and MongoDB, the API prioritizes scalability and follows RESTful design principles.
 
 In the future, Devboots will continue evolving. The API, currently running on mock data, will integrate user-generated content and tailor results for specific locations, enhancing its utility and value within the education and tech sectors.
+
+
+USE: http://localhost:5000/ ---- To view API documentation 
